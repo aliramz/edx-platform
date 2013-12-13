@@ -70,6 +70,7 @@ function (HTML5Video, Resizer) {
             if (state.currentPlayerMode !== 'flash') {
                 state.videoPlayer.onSpeedChange(state.speed);
             }
+            state.el.trigger('ready', arguments);
         });
 
         if (state.videoType === 'youtube') {
@@ -124,6 +125,16 @@ function (HTML5Video, Resizer) {
                     onStateChange: state.videoPlayer.onStateChange
                 }
             });
+
+            player = state.videoEl = state.videoPlayer.player.videoEl;
+
+            player[0].addEventListener('loadedmetadata', function () {
+                var videoWidth = player[0].videoWidth || player.width(),
+                    videoHeight = player[0].videoHeight || player.height();
+
+                _resize(state, videoWidth, videoHeight);
+            }, false);
+
         } else { // if (state.videoType === 'youtube') {
             if (state.currentPlayerMode === 'flash') {
                 youTubeId = state.youtubeId();
@@ -146,6 +157,10 @@ function (HTML5Video, Resizer) {
 
             _resize(state, videoWidth, videoHeight);
         }
+
+        if (state.isTouch) {
+            dfd.resolve();
+        }
     }
 
     function _resize (state, videoWidth, videoHeight) {
@@ -154,10 +169,10 @@ function (HTML5Video, Resizer) {
                 elementRatio: videoWidth/videoHeight,
                 container: state.videoEl.parent()
             })
-            .setMode('width')
             .callbacks.once(function() {
                 state.trigger('videoCaption.resize', null);
-            });
+            })
+            .setMode('width');
 
         $(window).bind('resize', _.debounce(state.resizer.align, 100));
     }
@@ -229,7 +244,7 @@ function (HTML5Video, Resizer) {
             // video. `endTime` will be set to `null`, and this if statement
             // will not be executed on next runs.
             if (
-                this.videoPlayer.endTime != null &&
+                this.videoPlayer.endTime !== null &&
                 this.videoPlayer.endTime <= this.videoPlayer.currentTime
             ) {
                 this.videoPlayer.pause();
@@ -297,6 +312,8 @@ function (HTML5Video, Resizer) {
             this.videoPlayer.player[methodName](youtubeId, time);
             this.videoPlayer.updatePlayTime(time);
         }
+
+        this.el.trigger('speedchange', arguments);
     }
 
     // Every 200 ms, if the video is playing, we call the function update, via
@@ -343,10 +360,12 @@ function (HTML5Video, Resizer) {
         }
 
         this.videoPlayer.updatePlayTime(newTime);
+
+        this.el.trigger('seek', arguments);
     }
 
     function onEnded() {
-        var time = this.videoPlayer.duration();
+         var time = this.videoPlayer.duration();
 
         this.trigger('videoControl.pause', null);
         this.trigger('videoProgressSlider.notifyThroughHandleEnd', {
@@ -368,6 +387,8 @@ function (HTML5Video, Resizer) {
         // `duration`. In this case, slider doesn't reach the end point of
         // timeline.
         this.videoPlayer.updatePlayTime(time);
+
+        this.el.trigger('ended', arguments);
     }
 
     function onPause() {
@@ -386,6 +407,8 @@ function (HTML5Video, Resizer) {
         if (this.config.show_captions) {
             this.trigger('videoCaption.pause', null);
         }
+
+        this.el.trigger('pause', arguments);
     }
 
     function onPlay() {
@@ -415,6 +438,8 @@ function (HTML5Video, Resizer) {
         }
 
         this.videoPlayer.ready();
+
+        this.el.trigger('play', arguments);
     }
 
     function onUnstarted() { }
@@ -429,21 +454,16 @@ function (HTML5Video, Resizer) {
         quality = this.videoPlayer.player.getPlaybackQuality();
 
         this.trigger('videoQualityControl.onQualityChange', quality);
+
+        this.el.trigger('qualitychange', arguments);
     }
 
     function onReady() {
-        var availablePlaybackRates, baseSpeedSubs, _this,
+        var _this = this,
+            availablePlaybackRates, baseSpeedSubs,
             player, videoWidth, videoHeight;
 
         dfd.resolve();
-
-        if (this.videoType === 'html5') {
-            player = this.videoEl = this.videoPlayer.player.videoEl;
-            videoWidth = player[0].videoWidth || player.width();
-            videoHeight = player[0].videoHeight || player.height();
-
-            _resize(this, videoWidth, videoHeight);
-        }
 
         this.videoPlayer.log('load_video');
 
@@ -469,7 +489,7 @@ function (HTML5Video, Resizer) {
             this.currentPlayerMode === 'html5' &&
             this.videoType === 'youtube'
         ) {
-            if (availablePlaybackRates.length === 1) {
+            if (availablePlaybackRates.length === 1 && !this.isTouch) {
                 // This condition is needed in cases when Firefox version is
                 // less than 20. In those versions HTML5 playback could only
                 // happen at 1 speed (no speed changing). Therefore, in this
@@ -486,7 +506,6 @@ function (HTML5Video, Resizer) {
                 // that the user specified.
 
                 baseSpeedSubs = this.videos['1.0'];
-                _this = this;
                 // this.videos is a dictionary containing various frame rates
                 // and their associated subs.
 
@@ -523,7 +542,7 @@ function (HTML5Video, Resizer) {
         /* The following has been commented out to make sure autoplay is
            disabled for students.
         if (
-            !onTouchBasedDevice() &&
+            !this.isTouch &&
             $('.video:first').data('autoplay') === 'True'
         ) {
             this.videoPlayer.play();
@@ -735,6 +754,7 @@ function (HTML5Video, Resizer) {
 
     function onVolumeChange(volume) {
         this.videoPlayer.player.setVolume(volume);
+        this.el.trigger('volumechange', arguments);
     }
 });
 
